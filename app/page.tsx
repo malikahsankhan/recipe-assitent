@@ -1,5 +1,16 @@
 'use client';
 import { useRef, useEffect, useState } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faRobot,
+  faUser,
+  faPaperPlane,
+  faUtensils,
+  faClock,
+  faLeaf,
+  faStar,
+  faSpinner
+} from '@fortawesome/free-solid-svg-icons';
 
 type Message = {
   id: string;
@@ -37,130 +48,170 @@ export default function RecipeAssistant() {
     setInput('');
     setIsBusy(true);
 
+    const assistantId = (Date.now() + 1).toString();
+    setMessages((prev) => [
+      ...prev,
+      { id: assistantId, role: 'assistant', content: '' },
+    ]);
+
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: updatedMessages }),
+        body: JSON.stringify({
+          messages: updatedMessages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+        }),
       });
+
+      if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
 
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let assistantText = '';
 
-      const assistantId = (Date.now() + 1).toString();
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: 'assistant', content: '' },
-      ]);
+      if (!reader) throw new Error('No reader');
 
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('0:')) {
-            try {
-              const jsonStr = line.slice(2);
-              const parsed = JSON.parse(jsonStr);
-              assistantText += parsed;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantId ? { ...m, content: assistantText } : m
-                )
-              );
-            } catch {}
-          }
-        }
+        assistantText += decoder.decode(value, { stream: true });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId ? { ...m, content: assistantText } : m
+          )
+        );
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error:', err);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: 'Kuch masla hua. Dobara try karo.' }
+            : m
+        )
+      );
     } finally {
       setIsBusy(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    sendMessage(input);
-  };
-
   return (
-    <div className="flex flex-col h-screen bg-orange-50">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-orange-50 via-white to-orange-25">
       {/* Header */}
-      <div className="bg-orange-500 text-white p-4 text-center shadow-md">
-        <h1 className="text-2xl font-bold">🍳 Chef AI - Recipe Assistant</h1>
-        <p className="text-sm opacity-80">Powered by Groq (Free)</p>
+      <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-6 shadow-lg">
+        <div className="flex items-center justify-center space-x-3">
+          <FontAwesomeIcon icon={faRobot} className="text-3xl" />
+          <div className="text-center">
+            <h1 className="text-2xl font-bold tracking-wide">Chef AI</h1>
+            <p className="text-sm opacity-90 flex items-center justify-center space-x-1">
+              <FontAwesomeIcon icon={faUtensils} className="text-xs" />
+              <span>Recipe Assistant</span>
+              <span className="text-xs">•</span>
+              <span>Powered by Groq</span>
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
         {messages.map((m) => (
-          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div
+            key={m.id}
+            className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
             <div
-              className={`max-w-[80%] p-3 rounded-2xl whitespace-pre-wrap text-sm shadow ${
+              className={`max-w-[85%] p-4 rounded-2xl shadow-lg transition-all duration-200 ${
                 m.role === 'user'
-                  ? 'bg-orange-500 text-white rounded-br-none'
-                  : 'bg-white text-gray-800 rounded-bl-none'
+                  ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-br-md'
+                  : 'bg-white text-gray-800 rounded-bl-md border border-gray-100'
               }`}
             >
-              {m.role === 'assistant' && (
-                <p className="font-bold text-orange-500 mb-1">👨‍🍳 Chef AI</p>
-              )}
-              {m.content}
+              <div className="flex items-center space-x-2 mb-2">
+                <FontAwesomeIcon
+                  icon={m.role === 'assistant' ? faRobot : faUser}
+                  className={`text-sm ${m.role === 'user' ? 'text-orange-100' : 'text-orange-500'}`}
+                />
+                <span className={`text-sm font-semibold ${m.role === 'user' ? 'text-orange-100' : 'text-orange-600'}`}>
+                  {m.role === 'assistant' ? 'Chef AI' : 'You'}
+                </span>
+              </div>
+              <div className="text-sm leading-relaxed whitespace-pre-wrap">
+                {m.content === '' && isBusy ? (
+                  <div className="flex items-center space-x-2 text-gray-500">
+                    <FontAwesomeIcon icon={faSpinner} className="animate-spin" />
+                    <span>Thinking of the perfect recipe...</span>
+                  </div>
+                ) : (
+                  m.content
+                )}
+              </div>
             </div>
           </div>
         ))}
-
-        {isBusy && messages[messages.length - 1]?.role !== 'assistant' && (
-          <div className="flex justify-start">
-            <div className="bg-white p-3 rounded-2xl rounded-bl-none shadow">
-              <p className="font-bold text-orange-500 mb-1">👨‍🍳 Chef AI</p>
-              <p className="text-gray-500 animate-pulse">Recipe soch raha hun...</p>
-            </div>
-          </div>
-        )}
-
         <div ref={bottomRef} />
       </div>
 
       {/* Quick Suggestions */}
-      <div className="px-4 py-2 flex gap-2 overflow-x-auto">
-        {['Biryani recipe', 'Aaj dinner mein kya banau?', 'Easy breakfast', 'Vegetarian khana'].map(
-          (suggestion) => (
+      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+        <div className="flex items-center space-x-2 mb-3">
+          <FontAwesomeIcon icon={faStar} className="text-orange-500 text-sm" />
+          <span className="text-sm font-medium text-gray-700">Quick Suggestions</span>
+        </div>
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {[
+            { text: 'Biryani recipe', icon: faUtensils },
+            { text: 'Aaj dinner mein kya banau?', icon: faClock },
+            { text: 'Easy breakfast', icon: faLeaf },
+            { text: 'Vegetarian khana', icon: faLeaf }
+          ].map(({ text, icon }) => (
             <button
-              key={suggestion}
+              key={text}
               type="button"
-              onClick={() => sendMessage(suggestion)}
+              onClick={() => sendMessage(text)}
               disabled={isBusy}
-              className="whitespace-nowrap bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-sm hover:bg-orange-200 border border-orange-300 disabled:opacity-50"
+              className="flex items-center space-x-2 whitespace-nowrap bg-white text-gray-700 px-4 py-2 rounded-full text-sm hover:bg-orange-50 hover:text-orange-600 border border-gray-200 hover:border-orange-300 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
             >
-              {suggestion}
+              <FontAwesomeIcon icon={icon} className="text-xs" />
+              <span>{text}</span>
             </button>
-          )
-        )}
+          ))}
+        </div>
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 bg-white border-t flex gap-2 shadow-lg">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Recipe poochho ya ingredients batao..."
-          className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm"
-          disabled={isBusy}
-        />
-        <button
-          type="submit"
-          disabled={isBusy || !input.trim()}
-          className="bg-orange-500 text-white px-5 py-2 rounded-full disabled:opacity-50 hover:bg-orange-600 font-semibold text-sm"
+      <div className="p-6 bg-white border-t border-gray-200 shadow-lg">
+        <form
+          onSubmit={(e) => { e.preventDefault(); sendMessage(input); }}
+          className="flex gap-3"
         >
-          Send
-        </button>
-      </form>
+          <div className="flex-1 relative">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask for recipes, ingredients, or cooking tips..."
+              className="w-full border border-gray-300 rounded-full px-6 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent text-sm placeholder-gray-500 shadow-sm transition-all duration-200"
+              disabled={isBusy}
+            />
+            {isBusy && (
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
+                <FontAwesomeIcon icon={faSpinner} className="animate-spin text-gray-400 text-sm" />
+              </div>
+            )}
+          </div>
+          <button
+            type="submit"
+            disabled={isBusy || !input.trim()}
+            className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-6 py-3 rounded-full disabled:opacity-50 hover:from-orange-600 hover:to-red-600 transition-all duration-200 shadow-md hover:shadow-lg disabled:cursor-not-allowed"
+          >
+            <FontAwesomeIcon icon={faPaperPlane} className="text-sm" />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

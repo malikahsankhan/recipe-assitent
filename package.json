@@ -11,6 +11,10 @@
   "dependencies": {
     "@ai-sdk/groq": "^3.0.39",
     "@ai-sdk/react": "^3.0.182",
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-regular-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/react-fontawesome": "^3.3.1",
     "ai": "^6.0.180",
     "next": "16.2.6",
     "react": "19.2.4",
