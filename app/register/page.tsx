@@ -12,66 +12,190 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const register = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    if (password !== confirm) { setError('Dono passwords match nahi karte!'); return }
-    if (password.length < 6) { setError('Password kam az kam 6 characters ka hona chahiye!'); return }
+    if (password !== confirm) { 
+      setError('Passwords do not match!'); 
+      return 
+    }
+    if (password.length < 6) { 
+      setError('Password must be at least 6 characters long!'); 
+      return 
+    }
     setLoading(true)
     const { error } = await supabase.auth.signUp({
       email, password,
       options: { data: { full_name: name } },
     })
-    if (error) { setError(error.message) } else { setSuccess(true) }
+    if (error) { 
+      setError(error.message) 
+    } else { 
+      setSuccess(true) 
+    }
     setLoading(false)
   }
 
   if (success) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-orange-50">
-        <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm text-center">
-          <div className="text-5xl mb-4">📧</div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Email Confirm Karo!</h2>
-          <p className="text-gray-500 text-sm mb-4">
-            <span className="font-semibold text-orange-500">{email}</span> par confirmation email bheja gaya hai.
+      <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-orange-600 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
+          <div className="w-20 h-20 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6">
+            <i className="fas fa-check-circle text-white text-3xl"></i>
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">Verify Your Email! 📧</h2>
+          <p className="text-gray-600 mb-2">
+            We've sent a confirmation link to:
           </p>
-          <Link href="/" className="text-orange-500 font-semibold hover:underline text-sm">Login page par jao</Link>
+          <p className="text-orange-500 font-semibold mb-6 break-all">
+            {email}
+          </p>
+          <p className="text-gray-500 text-sm mb-6">
+            Click the link in the email to activate your account and start your culinary journey!
+          </p>
+          <Link 
+            href="/" 
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg"
+          >
+            <i className="fas fa-utensils"></i>
+            Go to Login
+          </Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-orange-50">
-      <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-sm">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-orange-500">🍳 Chef AI</h1>
-          <p className="text-gray-400 text-sm mt-1">Naya account banao</p>
+    <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-orange-600 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        {/* Logo and Header */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <i className="fas fa-utensils text-white text-2xl"></i>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            Chef<span className="text-orange-500">AI</span>
+          </h1>
+          <p className="text-gray-500 text-sm">
+            Create your account and start cooking smarter
+          </p>
         </div>
-        <form onSubmit={register} className="space-y-3">
-          <input type="text" placeholder="Apna naam" value={name}
-            onChange={(e) => setName(e.target.value)} required
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          <input type="email" placeholder="Email" value={email}
-            onChange={(e) => setEmail(e.target.value)} required
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          <input type="password" placeholder="Password (min 6 characters)" value={password}
-            onChange={(e) => setPassword(e.target.value)} required
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          <input type="password" placeholder="Password dobara likho" value={confirm}
-            onChange={(e) => setConfirm(e.target.value)} required
-            className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400" />
-          {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-          <button type="submit" disabled={loading}
-            className="w-full bg-orange-500 text-white py-3 rounded-xl font-semibold hover:bg-orange-600 disabled:opacity-50 transition">
-            {loading ? 'Account ban raha hai...' : 'Register karo'}
+
+        {/* Registration Form */}
+        <form onSubmit={register} className="space-y-4">
+          {/* Name Field */}
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="fas fa-user text-sm"></i>
+            </div>
+            <input 
+              type="text" 
+              placeholder="Full Name" 
+              value={name}
+              onChange={(e) => setName(e.target.value)} 
+              required
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 pl-10 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all duration-300"
+            />
+          </div>
+
+          {/* Email Field */}
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="fas fa-envelope text-sm"></i>
+            </div>
+            <input 
+              type="email" 
+              placeholder="Email Address" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)} 
+              required
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 pl-10 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all duration-300"
+            />
+          </div>
+
+          {/* Password Field */}
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="fas fa-lock text-sm"></i>
+            </div>
+            <input 
+              type={showPassword ? "text" : "password"}
+              placeholder="Password (min 6 characters)" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)} 
+              required
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 pl-10 pr-12 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all duration-300"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+            </button>
+          </div>
+
+          {/* Confirm Password Field */}
+          <div className="relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <i className="fas fa-lock text-sm"></i>
+            </div>
+            <input 
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="Confirm Password" 
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)} 
+              required
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 pl-10 pr-12 text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition-all duration-300"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <i className={`fas ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+            </button>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-red-500 text-xs text-center">{error}</p>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 text-white py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <i className="fas fa-circle-notch fa-spin"></i>
+                Creating account...
+              </span>
+            ) : (
+              'Create Account'
+            )}
           </button>
         </form>
-        <p className="text-center text-sm text-gray-400 mt-4">
-          Pehle se account hai?{' '}
-          <Link href="/" className="text-orange-500 font-semibold hover:underline">Login karo</Link>
-        </p>
+
+        {/* Login Link */}
+        <div className="mt-6 text-center">
+          <p className="text-gray-500 text-sm">
+            Already have an account?{' '}
+            <Link 
+              href="/" 
+              className="text-orange-500 font-semibold hover:text-orange-600 transition-colors hover:underline"
+            >
+              Sign in
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )
