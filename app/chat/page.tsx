@@ -1,6 +1,6 @@
 'use client'
 import { useRef, useEffect, useState, useCallback } from 'react'
-import {createClient} from
+import { createClient } from '../lib/supbase/client'
 import { useRouter } from 'next/navigation'
 
 type Message = {
@@ -138,24 +138,24 @@ export default function ChatPage() {
         }),
       })
 
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`)
+      }
+
       const reader = res.body?.getReader()
+      if (!reader) throw new Error('No reader available for response stream')
+
       const decoder = new TextDecoder()
       let assistantText = ''
 
-      while (reader) {
+      while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          if (line.startsWith('0:')) {
-            try {
-              assistantText += JSON.parse(line.slice(2))
-              setMessages(prev =>
-                prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
-              )
-            } catch {}
-          }
-        }
+        assistantText += chunk
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
+        )
       }
 
       // Save assistant message to DB

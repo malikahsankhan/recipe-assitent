@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { createClient } from '@supabase/supabase-js'
+import { useState, type FormEvent } from 'react'
+import { createClient } from '../lib/supbase/client'
 import Link from 'next/link'
 
 export default function RegisterPage() {
@@ -13,7 +13,7 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const register = async (e: React.FormEvent) => {
+  const register = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
     if (password !== confirm) { setError('Dono passwords match nahi karte!'); return }

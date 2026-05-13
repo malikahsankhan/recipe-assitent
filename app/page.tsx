@@ -1,6 +1,6 @@
-'use client'
-import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+'use client';
+import { useState, type FormEvent } from 'react'
+import { createClient } from './lib/supbase/client';
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
@@ -12,7 +12,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const signInWithEmail = async (e: React.FormEvent) => {
+  const signInWithEmail = async (e: FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
