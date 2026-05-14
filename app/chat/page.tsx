@@ -1,7 +1,9 @@
 'use client'
-import { useRef, useEffect, useState, useCallback } from 'react'
-import { createClient } from '../lib/supbase/client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
+import { createClient } from '../lib/supbase/client'
 
 type Message = {
   id: string
@@ -28,37 +30,46 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [deletingSession, setDeletingSession] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const tempIdRef = useRef(0)
+  const assistantTextRef = useRef('')
 
-  // Load user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) { router.push('/'); return }
+      if (!data.user) {
+        router.push('/')
+        return
+      }
+
       setUser({
         id: data.user.id,
         email: data.user.email,
         name: data.user.user_metadata?.full_name,
         avatar: data.user.user_metadata?.avatar_url,
       })
+
+      supabase
+        .from('chat_sessions')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .then(({ data: sessionsData }) => {
+          if (sessionsData) setSessions(sessionsData)
+        })
     })
   }, [router, supabase])
 
-  // Load sessions
   const loadSessions = useCallback(async () => {
     const { data } = await supabase
       .from('chat_sessions')
       .select('*')
       .order('updated_at', { ascending: false })
+
     if (data) setSessions(data)
   }, [supabase])
 
   useEffect(() => {
-    if (user) loadSessions()
-  }, [user, loadSessions])
-
-  // Load messages for active session
-  useEffect(() => {
     if (!activeSession) return
+
     supabase
       .from('chat_messages')
       .select('*')
@@ -74,18 +85,23 @@ export default function ChatPage() {
   }, [messages])
 
   useEffect(() => {
-    if (activeSession) {
-      inputRef.current?.focus()
-    }
+    if (activeSession) inputRef.current?.focus()
   }, [activeSession])
+
+  const createTempId = () => {
+    tempIdRef.current += 1
+    return `temp-${tempIdRef.current}`
+  }
 
   const newChat = async () => {
     if (!user) return
+
     const { data } = await supabase
       .from('chat_sessions')
       .insert({ user_id: user.id, title: 'New Chat' })
       .select()
       .single()
+
     if (data) {
       setSessions(prev => [data, ...prev])
       setActiveSession(data.id)
@@ -98,10 +114,12 @@ export default function ChatPage() {
     setDeletingSession(sessionId)
     await supabase.from('chat_sessions').delete().eq('id', sessionId)
     setSessions(prev => prev.filter(s => s.id !== sessionId))
+
     if (activeSession === sessionId) {
       setActiveSession(null)
       setMessages([])
     }
+
     setDeletingSession(null)
   }
 
@@ -110,26 +128,25 @@ export default function ChatPage() {
 
     let sessionId = activeSession
 
-    // Auto create session if none
     if (!sessionId) {
       const { data } = await supabase
         .from('chat_sessions')
         .insert({ user_id: user.id, title: text.slice(0, 40) })
         .select()
         .single()
+
       if (!data) return
       sessionId = data.id
       setActiveSession(data.id)
       setSessions(prev => [data, ...prev])
     }
 
-    const userMsg: Message = { id: Date.now().toString(), role: 'user', content: text }
+    const userMsg: Message = { id: createTempId(), role: 'user', content: text }
     const updatedMessages = [...messages, userMsg]
     setMessages(updatedMessages)
     setInput('')
     setIsBusy(true)
 
-    // Save user message to DB
     await supabase.from('chat_messages').insert({
       session_id: sessionId,
       user_id: user.id,
@@ -137,7 +154,8 @@ export default function ChatPage() {
       content: text,
     })
 
-    const assistantId = (Date.now() + 1).toString()
+    const assistantId = createTempId()
+    assistantTextRef.current = ''
     setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
     try {
@@ -149,35 +167,31 @@ export default function ChatPage() {
         }),
       })
 
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`)
-      }
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`)
 
       const reader = res.body?.getReader()
       if (!reader) throw new Error('No reader available for response stream')
 
       const decoder = new TextDecoder()
-      let assistantText = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        assistantText += chunk
+
+        const assistantText = assistantTextRef.current + decoder.decode(value, { stream: true })
+        assistantTextRef.current = assistantText
         setMessages(prev =>
           prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
         )
       }
 
-      // Save assistant message to DB
       await supabase.from('chat_messages').insert({
         session_id: sessionId,
         user_id: user.id,
         role: 'assistant',
-        content: assistantText,
+        content: assistantTextRef.current,
       })
 
-      // Update session title if first message
       if (messages.length === 0) {
         await supabase
           .from('chat_sessions')
@@ -185,13 +199,14 @@ export default function ChatPage() {
           .eq('id', sessionId)
         loadSessions()
       }
-
     } catch (err) {
       console.error(err)
       setMessages(prev =>
-        prev.map(m => m.id === assistantId 
-          ? { ...m, content: "Sorry, I'm having trouble connecting. Please try again in a moment." } 
-          : m)
+        prev.map(m =>
+          m.id === assistantId
+            ? { ...m, content: "Sorry, I'm having trouble connecting. Please try again in a moment." }
+            : m
+        )
       )
     } finally {
       setIsBusy(false)
@@ -203,45 +218,49 @@ export default function ChatPage() {
     router.push('/')
   }
 
-  // Suggested prompts
   const suggestions = [
-    { text: '🍛 Biryani Recipe', prompt: 'How to make authentic chicken biryani? Give me step by step instructions.' },
-    { text: '🍳 Quick Breakfast', prompt: 'Quick and easy breakfast ideas under 15 minutes' },
-    { text: '🥗 Healthy Dinner', prompt: 'Healthy vegetarian dinner recipes for weight loss' },
-    { text: '🍝 Easy Pasta', prompt: 'What should I cook for dinner today? Give me pasta recipes.' },
-    { text: '🎂 Dessert', prompt: 'Easy dessert recipes for beginners with simple ingredients' }
+    { icon: 'fa-bowl-rice', text: 'Biryani Recipe', prompt: 'How to make authentic chicken biryani? Give me step by step instructions.' },
+    { icon: 'fa-mug-saucer', text: 'Quick Breakfast', prompt: 'Quick and easy breakfast ideas under 15 minutes' },
+    { icon: 'fa-leaf', text: 'Healthy Dinner', prompt: 'Healthy vegetarian dinner recipes for weight loss' },
+    { icon: 'fa-plate-wheat', text: 'Easy Pasta', prompt: 'What should I cook for dinner today? Give me pasta recipes.' },
+    { icon: 'fa-cookie-bite', text: 'Dessert', prompt: 'Easy dessert recipes for beginners with simple ingredients' },
   ]
 
   return (
-    <div className="h-screen flex bg-gray-50 overflow-hidden">
-      {/* Mobile overlay */}
+    <div className="flex h-dvh min-h-[560px] overflow-hidden bg-[#f8f6f1] text-gray-900">
       {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden transition-opacity duration-300"
+        <div
+          className="fixed inset-0 z-20 bg-gray-950/45 backdrop-blur-[2px] transition-opacity duration-300 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Sidebar */}
       <aside className={`
-        fixed lg:relative lg:flex lg:w-80 w-80 h-full bg-white border-r border-gray-200 
-        flex flex-col transition-transform duration-300 ease-in-out z-30 shadow-xl
+        fixed inset-y-0 left-0 z-30 flex h-full w-[min(88vw,20rem)] flex-col border-r border-stone-200
+        bg-white shadow-2xl transition-transform duration-300 ease-in-out lg:relative lg:w-80 lg:shadow-none
         ${sidebarOpen ? 'translate-x-0 pointer-events-auto' : '-translate-x-full pointer-events-none lg:translate-x-0 lg:pointer-events-auto'}
       `}>
-        {/* Sidebar Header */}
-        <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-gray-900 to-gray-800">
+        <div className="border-b border-stone-200 bg-[#1f2723] p-4 sm:p-5">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-              <i className="fa-solid fa-utensils text-white text-lg" aria-hidden="true" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 shadow-lg">
+              <i className="fa-solid fa-utensils text-lg text-white" aria-hidden="true" />
             </div>
-            <div className="flex-1">
-              <h1 className="text-white font-bold text-lg">ChefAI</h1>
-              <p className="text-gray-400 text-xs">Your AI Kitchen Assistant</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-lg font-bold text-white">ChefAI</h1>
+              <p className="truncate text-xs text-stone-300">Your AI Kitchen Assistant</p>
             </div>
-            <button 
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="rounded-lg p-2 text-stone-300 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+              title="Close menu"
+            >
+              <i className="fa-solid fa-xmark text-lg" aria-hidden="true" />
+            </button>
+            <button
               type="button"
               onClick={signOut}
-              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+              className="rounded-lg p-2 text-stone-300 transition-colors hover:bg-white/10 hover:text-white"
               title="Sign out"
             >
               <i className="fa-solid fa-right-from-bracket text-lg" aria-hidden="true" />
@@ -249,50 +268,58 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* User Profile Section */}
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
+        <div className="border-b border-stone-100 bg-stone-50 p-4">
           <div className="flex items-center gap-3">
             {user?.avatar ? (
-              <img src={user.avatar} alt="avatar" className="w-10 h-10 rounded-full ring-2 ring-amber-400" />
+              <Image
+                src={user.avatar}
+                alt="avatar"
+                width={40}
+                height={40}
+                unoptimized
+                className="h-10 w-10 rounded-full object-cover ring-2 ring-amber-400"
+              />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 flex items-center justify-center ring-2 ring-amber-300">
-                  <i className="fa-solid fa-user text-white text-sm" aria-hidden="true" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500 ring-2 ring-amber-200">
+                <i className="fa-solid fa-user text-sm text-white" aria-hidden="true" />
               </div>
             )}
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-800 text-sm truncate">{user?.name || 'Chef'}</p>
-              <p className="text-gray-500 text-xs truncate">{user?.email}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-gray-800">{user?.name || 'Chef'}</p>
+              <p className="truncate text-xs text-gray-500">{user?.email}</p>
             </div>
           </div>
         </div>
 
-        {/* New Chat Button */}
         <div className="p-4">
           <button
+            type="button"
             onClick={newChat}
-            className="w-full bg-gradient-to-r from-gray-900 to-gray-800 text-white py-2.5 rounded-xl text-sm font-semibold hover:from-gray-800 hover:to-gray-700 transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center gap-2 group"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1f2723] px-4 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#2d3933] focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
           >
-            <span className="text-sm">➕</span>
+            <i className="fa-solid fa-plus text-xs" aria-hidden="true" />
             New Conversation
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-3 pb-4">
-          <div className="px-2 mb-3">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+          <div className="mb-3 px-2">
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-stone-400">
               <i className="fa-solid fa-history text-xs" aria-hidden="true" />
               Chat History
             </p>
           </div>
+
           {sessions.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <i className="fa-solid fa-comments text-gray-400 text-2xl" aria-hidden="true" />
+            <div className="py-12 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-stone-100">
+                <i className="fa-solid fa-comments text-2xl text-stone-400" aria-hidden="true" />
               </div>
-              <p className="text-sm text-gray-400">No conversations yet</p>
-              <p className="text-xs text-gray-300 mt-1">Start a new chat above</p>
+              <p className="text-sm text-stone-500">No conversations yet</p>
+              <p className="mt-1 text-xs text-stone-400">Start a new chat above</p>
             </div>
           )}
+
           <div className="space-y-1">
             {sessions.map(s => (
               <div
@@ -301,23 +328,27 @@ export default function ChatPage() {
                   setActiveSession(s.id)
                   setSidebarOpen(false)
                 }}
-                className={`group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 ${
-                  activeSession === s.id 
-                    ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-amber-500 shadow-sm' 
-                    : 'hover:bg-gray-50'
+                className={`group flex cursor-pointer items-center justify-between rounded-xl p-3 transition-all duration-200 ${
+                  activeSession === s.id
+                    ? 'border-l-4 border-amber-500 bg-amber-50 shadow-sm'
+                    : 'hover:bg-stone-50'
                 }`}
               >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <i className={`fa-solid fa-comments text-sm ${activeSession === s.id ? 'text-amber-500' : 'text-gray-400'}`} aria-hidden="true" />
-                  <span className={`text-sm truncate ${activeSession === s.id ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
+                  <span className={`truncate text-sm ${activeSession === s.id ? 'font-medium text-gray-900' : 'text-gray-600'}`}>
                     {s.title}
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); deleteSession(s.id) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    deleteSession(s.id)
+                  }}
                   disabled={deletingSession === s.id}
-                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all p-1 hover:bg-red-50 rounded"
+                  className="rounded p-2 text-red-400 opacity-100 transition-all hover:bg-red-50 hover:text-red-600 disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100"
+                  title="Delete conversation"
                 >
                   <i className="fa-solid fa-trash text-xs" aria-hidden="true" />
                 </button>
@@ -326,73 +357,68 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Sidebar Footer */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50">
-          <div className="text-xs text-center text-gray-400 flex items-center justify-center gap-2">
+        <div className="border-t border-stone-100 bg-stone-50 p-4">
+          <div className="flex items-center justify-center gap-2 text-center text-xs text-stone-400">
             <i className="fa-solid fa-robot text-amber-500" aria-hidden="true" />
             <span>Powered by AI</span>
           </div>
         </div>
       </aside>
 
-      {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-gray-50 to-white">
-        {/* Header */}
-        <div className="bg-white/95 backdrop-blur-sm border-b border-gray-200 px-4 py-3 flex items-center gap-3 shadow-sm sticky top-0 z-10">
-          <button 
+      <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#f8f6f1]">
+        <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-stone-200 bg-white/90 px-3 py-3 shadow-sm backdrop-blur-sm sm:px-5">
+          <button
             type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden text-gray-600 hover:text-gray-900 transition-colors p-2 hover:bg-gray-100 rounded-lg"
+            className="rounded-lg p-2 text-gray-600 transition-colors hover:bg-stone-100 hover:text-gray-900 lg:hidden"
+            title="Open menu"
           >
             <i className={`fa-solid text-lg ${sidebarOpen ? 'fa-xmark' : 'fa-bars'}`} aria-hidden="true" />
           </button>
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <i className="fa-solid fa-robot text-amber-500" aria-hidden="true" />
-              <h2 className="font-semibold text-gray-800">
+              <i className="fa-solid fa-robot shrink-0 text-amber-500" aria-hidden="true" />
+              <h2 className="truncate font-semibold text-gray-800">
                 {activeSession ? 'Cooking Assistant' : 'Welcome to ChefAI'}
               </h2>
             </div>
             {activeSession && messages.length > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                {messages.length} messages • Active conversation
+              <p className="mt-0.5 truncate text-xs text-gray-400">
+                {messages.length} messages - Active conversation
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-amber-400 to-orange-400 rounded-lg flex items-center justify-center shadow-sm">
-              <i className="fa-solid fa-utensils text-white text-sm" aria-hidden="true" />
-            </div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 shadow-sm">
+            <i className="fa-solid fa-utensils text-sm text-white" aria-hidden="true" />
           </div>
         </div>
 
-        {/* Messages Container */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+          <div className="mx-auto w-full max-w-5xl space-y-4 px-3 py-4 sm:px-5 sm:py-6">
             {!activeSession ? (
-              <div className="flex flex-col items-center justify-center min-h-[70vh] text-center">
-                <div className="relative">
-                  <div className="absolute -bottom-2 -right-2 w-20 mb-5 h-20 bg-amber-500 rounded-full flex items-center justify-center shadow-lg">
-                    <i className="fa-solid fa-robot text-white text-lg" aria-hidden="true" />
-                  </div>
+              <div className="mx-auto flex min-h-[calc(100dvh-190px)] max-w-3xl flex-col items-center justify-center py-8 text-center sm:py-12">
+                <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-3xl bg-[#1f2723] shadow-xl shadow-stone-300/50 sm:h-24 sm:w-24">
+                  <i className="fa-solid fa-utensils text-3xl text-amber-400" aria-hidden="true" />
                 </div>
-                <h2 className="text-3xl font-bold text-gray-800 mb-3">
-                  What would you like to cook today? 🍳
+                <h2 className="mb-3 text-balance text-2xl font-bold text-gray-900 sm:text-4xl">
+                  What would you like to cook today?
                 </h2>
-                <p className="text-gray-500 mb-8 max-w-md">
+                <p className="mb-7 max-w-xl text-sm leading-6 text-gray-500 sm:text-base">
                   Ask me anything about recipes, cooking techniques, meal planning, or ingredient substitutions.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl w-full">
+                <div className="grid w-full max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
                   {suggestions.map((suggestion, idx) => (
                     <button
                       type="button"
                       key={idx}
                       onClick={() => sendMessage(suggestion.prompt)}
                       disabled={isBusy}
-                      className="px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 hover:border-amber-300 transition-all disabled:opacity-50 shadow-sm flex items-center justify-center gap-2 group"
+                      className="group flex min-h-14 items-center justify-start gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 text-left text-sm font-medium text-gray-700 shadow-sm transition-all hover:border-amber-300 hover:bg-amber-50/50 disabled:opacity-50"
                     >
-                      <i className="fa-solid fa-lightbulb text-amber-400 text-xs group-hover:scale-110 transition-transform" aria-hidden="true" />
-                      {suggestion.text}
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 transition-transform group-hover:scale-105">
+                        <i className={`fa-solid ${suggestion.icon} text-sm`} aria-hidden="true" />
+                      </span>
+                      <span className="truncate">{suggestion.text}</span>
                     </button>
                   ))}
                 </div>
@@ -401,29 +427,25 @@ export default function ChatPage() {
               <>
                 {messages.map(m => (
                   <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-                    <div className={`flex gap-3 max-w-full lg:max-w-[75%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      {/* Avatar */}
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm ${
-                        m.role === 'user' 
-                          ? 'bg-gradient-to-br from-gray-800 to-gray-700' 
-                          : 'bg-gradient-to-br from-amber-400 to-orange-400'
+                    <div className={`flex max-w-[94%] gap-2 sm:max-w-[86%] sm:gap-3 lg:max-w-[74%] ${m.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                      <div className={`hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl shadow-sm sm:flex ${
+                        m.role === 'user' ? 'bg-[#1f2723]' : 'bg-amber-500'
                       }`}>
-                        <i className={`text-white text-sm ${m.role === 'user' ? 'fa-solid fa-user' : 'fa-solid fa-robot'}`} aria-hidden="true" />
+                        <i className={`text-sm text-white ${m.role === 'user' ? 'fa-solid fa-user' : 'fa-solid fa-robot'}`} aria-hidden="true" />
                       </div>
-                      
-                      {/* Message Bubble */}
-                      <div className={`flex-1 px-5 py-3 ${
+
+                      <div className={`min-w-0 flex-1 px-4 py-3 sm:px-5 ${
                         m.role === 'user'
-                          ? 'bg-gradient-to-br from-gray-800 to-gray-700 text-white rounded-2xl rounded-tr-sm'
-                          : 'bg-white text-gray-800 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100'
+                          ? 'rounded-2xl rounded-tr-sm bg-[#1f2723] text-white'
+                          : 'rounded-2xl rounded-tl-sm border border-stone-200 bg-white text-gray-800 shadow-sm'
                       }`}>
                         {m.role === 'assistant' && (
-                          <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
-                              <i className="fa-solid fa-robot text-amber-500 text-xs" aria-hidden="true" />
-                            <span className="font-semibold text-xs text-gray-700">ChefAI</span>
+                          <div className="mb-2 flex items-center gap-2 border-b border-stone-100 pb-2">
+                            <i className="fa-solid fa-robot text-xs text-amber-500" aria-hidden="true" />
+                            <span className="text-xs font-semibold text-gray-700">ChefAI</span>
                           </div>
                         )}
-                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                        <div className="overflow-wrap-anywhere whitespace-pre-wrap break-words text-sm leading-relaxed">
                           {m.content === '' && isBusy && m.role === 'assistant' ? (
                             <div className="flex items-center gap-2">
                               <i className="fa-solid fa-circle-notch fa-spin text-amber-500" aria-hidden="true" />
@@ -443,50 +465,58 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Input Area */}
-        <div className="border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-lg">
-          <div className="max-w-4xl mx-auto px-4 py-4">
+        <div className="border-t border-stone-200 bg-white/95 shadow-[0_-10px_30px_rgba(15,23,42,0.06)] backdrop-blur-sm">
+          <div className="mx-auto w-full max-w-5xl px-3 py-3 sm:px-5 sm:py-4">
             {activeSession && messages.length > 0 && (
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
-                <i className="fa-solid fa-lightbulb text-amber-400 text-sm mt-1.5" aria-hidden="true" />
+              <div className="scrollbar-thin mb-3 flex gap-2 overflow-x-auto pb-2">
+                <i className="fa-solid fa-lightbulb mt-2 text-sm text-amber-400" aria-hidden="true" />
                 {suggestions.slice(0, 3).map(s => (
                   <button
                     type="button"
                     key={s.text}
                     onClick={() => sendMessage(s.prompt)}
                     disabled={isBusy}
-                    className="text-xs bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-gray-800 px-3 py-1.5 rounded-full transition-all whitespace-nowrap border border-gray-200 hover:border-amber-300"
+                    className="whitespace-nowrap rounded-full border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-gray-600 transition-all hover:border-amber-300 hover:bg-amber-50 hover:text-gray-800 disabled:opacity-50"
                   >
-                    {s.text}
+                    <i className={`fa-solid ${s.icon} mr-1.5 text-amber-500`} aria-hidden="true" />
+                    <span>{s.text}</span>
                   </button>
                 ))}
               </div>
             )}
-            
-            <form onSubmit={(e) => { e.preventDefault(); sendMessage(input) }} className="flex gap-3">
-              <div className="flex-1 relative">
-                <input
+
+            <form onSubmit={(e) => { e.preventDefault(); sendMessage(input) }} className="flex items-end gap-2 sm:gap-3">
+              <div className="relative flex-1">
+                <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      sendMessage(input)
+                    }
+                  }}
                   placeholder="Ask me about recipes, ingredients, or cooking tips..."
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 pr-12 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent text-sm bg-white"
+                  rows={1}
+                  className="max-h-32 min-h-12 w-full resize-none rounded-xl border border-stone-200 bg-white px-4 py-3 pr-11 text-sm leading-6 text-gray-900 shadow-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:bg-stone-50"
                   disabled={isBusy}
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs">
+                <div className="pointer-events-none absolute right-3 top-3.5 text-xs text-stone-300">
                   <i className="fa-solid fa-utensils" aria-hidden="true" />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={isBusy || !input.trim()}
-                className="bg-gradient-to-r from-gray-900 to-gray-800 text-white px-5 py-2.5 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed hover:from-gray-800 hover:to-gray-700 transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-semibold text-sm min-w-[90px]"
+                className="flex h-12 min-w-12 items-center justify-center gap-2 rounded-xl bg-[#1f2723] px-4 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#2d3933] disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[96px] sm:px-5"
+                title="Send message"
               >
                 {isBusy ? (
                   <i className="fa-solid fa-circle-notch fa-spin" aria-hidden="true" />
                 ) : (
                   <>
-                    <span>Send</span>
+                    <span className="hidden sm:inline">Send</span>
                     <i className="fa-solid fa-paper-plane text-xs" aria-hidden="true" />
                   </>
                 )}
@@ -507,19 +537,27 @@ export default function ChatPage() {
             transform: translateY(0);
           }
         }
+
         .animate-fadeIn {
           animation: fadeIn 0.3s ease-out;
         }
+
         .scrollbar-thin::-webkit-scrollbar {
           height: 4px;
         }
+
         .scrollbar-thin::-webkit-scrollbar-track {
-          background: #f1f1f1;
+          background: #f5f5f4;
           border-radius: 10px;
         }
+
         .scrollbar-thin::-webkit-scrollbar-thumb {
-          background: #d1d5db;
+          background: #d6d3d1;
           border-radius: 10px;
+        }
+
+        .overflow-wrap-anywhere {
+          overflow-wrap: anywhere;
         }
       `}</style>
     </div>

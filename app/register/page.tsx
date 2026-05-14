@@ -51,7 +51,7 @@ export default function RegisterPage() {
             Verify Your Email!
           </h2>
           <p className="text-gray-600 mb-2">
-            We've sent a confirmation link to:
+            We&apos;ve sent a confirmation link to:
           </p>
           <p className="text-orange-500 font-semibold mb-6 break-all">
             {email}
