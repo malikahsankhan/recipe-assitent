@@ -69,6 +69,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!activeSession) return
+    if (isBusy) return
 
     supabase
       .from('chat_messages')
@@ -78,7 +79,7 @@ export default function ChatPage() {
       .then(({ data }) => {
         if (data) setMessages(data.map(m => ({ id: m.id, role: m.role, content: m.content })))
       })
-  }, [activeSession, supabase])
+  }, [activeSession, isBusy, supabase])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -179,6 +180,15 @@ export default function ChatPage() {
         if (done) break
 
         const assistantText = assistantTextRef.current + decoder.decode(value, { stream: true })
+        assistantTextRef.current = assistantText
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
+        )
+      }
+
+      const remainingText = decoder.decode()
+      if (remainingText) {
+        const assistantText = assistantTextRef.current + remainingText
         assistantTextRef.current = assistantText
         setMessages(prev =>
           prev.map(m => m.id === assistantId ? { ...m, content: assistantText } : m)
