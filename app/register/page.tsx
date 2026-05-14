@@ -44,9 +44,12 @@ export default function RegisterPage() {
       <div className="min-h-screen bg-gradient-to-br from-orange-400 via-orange-500 to-orange-600 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md text-center">
           <div className="w-20 h-20 bg-gradient-to-r from-orange-400 to-orange-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <i className="fas fa-check-circle text-white text-3xl"></i>
+            <i className="fa-solid fa-circle-check text-white text-3xl" aria-hidden="true" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-3">Verify Your Email! 📧</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-3 flex items-center justify-center gap-2">
+            <i className="fa-solid fa-envelope text-orange-500" aria-hidden="true" />
+            Verify Your Email!
+          </h2>
           <p className="text-gray-600 mb-2">
             We've sent a confirmation link to:
           </p>
@@ -60,7 +63,7 @@ export default function RegisterPage() {
             href="/" 
             className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all duration-300 shadow-lg"
           >
-            <i className="fas fa-utensils"></i>
+            <i className="fa-solid fa-utensils" aria-hidden="true" />
             Go to Login
           </Link>
         </div>
@@ -74,7 +77,7 @@ export default function RegisterPage() {
         {/* Logo and Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <i className="fas fa-utensils text-white text-2xl"></i>
+            <i className="fa-solid fa-utensils text-white text-2xl" aria-hidden="true" />
           </div>
           <h1 className="text-3xl font-bold text-gray-800 mb-2">
             Chef<span className="text-orange-500">AI</span>
@@ -89,7 +92,7 @@ export default function RegisterPage() {
           {/* Name Field */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <i className="fas fa-user text-sm"></i>
+              <i className="fa-solid fa-user text-sm" aria-hidden="true" />
             </div>
             <input 
               type="text" 
@@ -104,7 +107,7 @@ export default function RegisterPage() {
           {/* Email Field */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <i className="fas fa-envelope text-sm"></i>
+              <i className="fa-solid fa-envelope text-sm" aria-hidden="true" />
             </div>
             <input 
               type="email" 
@@ -119,7 +122,7 @@ export default function RegisterPage() {
           {/* Password Field */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <i className="fas fa-lock text-sm"></i>
+              <i className="fa-solid fa-lock text-sm" aria-hidden="true" />
             </div>
             <input 
               type={showPassword ? "text" : "password"}
@@ -134,14 +137,14 @@ export default function RegisterPage() {
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+              <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`} aria-hidden="true" />
             </button>
           </div>
 
           {/* Confirm Password Field */}
           <div className="relative">
             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-              <i className="fas fa-lock text-sm"></i>
+              <i className="fa-solid fa-lock text-sm" aria-hidden="true" />
             </div>
             <input 
               type={showConfirmPassword ? "text" : "password"}
@@ -156,7 +159,7 @@ export default function RegisterPage() {
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
-              <i className={`fas ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`}></i>
+              <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-sm`} aria-hidden="true" />
             </button>
           </div>
 
@@ -175,7 +178,7 @@ export default function RegisterPage() {
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <i className="fas fa-circle-notch fa-spin"></i>
+                <i className="fa-solid fa-circle-notch fa-spin" aria-hidden="true" />
                 Creating account...
               </span>
             ) : (
